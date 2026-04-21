@@ -2,10 +2,10 @@ import * as THREE from 'three';
 
 // ─── Scene Setup ────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x060608);
-scene.fog = new THREE.FogExp2(0x080810, 0.040);
+scene.background = new THREE.Color(0x010510);
+scene.fog = new THREE.FogExp2(0x04071a, 0.018);
 
-const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 400);
 camera.position.set(0, 1.5, 6.2);
 camera.lookAt(0, 1.6, 0);
 
@@ -40,6 +40,7 @@ const loader = new THREE.TextureLoader();
 const floorTex  = loader.load('./assets/floor.png');
 const wallTex   = loader.load('./assets/wall.png');
 const lanternTex = loader.load('./assets/lantern.png');
+const moonTex = loader.load('./assets/moon.jpg');
 
 [floorTex, wallTex].forEach(t => {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -112,14 +113,19 @@ leftWall.position.set(-CORRIDOR_W / 2, CORRIDOR_H / 2, -CORRIDOR_D / 2 + 7);
 leftWall.receiveShadow = true;
 scene.add(leftWall);
 
-// Right railing side — open (dark outside)
-// We add a subtle dark panel to suggest the open colonnade
+// Right railing side — open to the sky.
+// Keep only a faint lower scrim so the upper half remains visibly open.
 const rightPanel = new THREE.Mesh(
-  new THREE.PlaneGeometry(CORRIDOR_D, CORRIDOR_H),
-  new THREE.MeshStandardMaterial({ color: 0x060301, roughness: 1.0 })
+  new THREE.PlaneGeometry(CORRIDOR_D, 1.15),
+  new THREE.MeshStandardMaterial({
+    color: 0x081018,
+    roughness: 1.0,
+    transparent: true,
+    opacity: 0.22,
+  })
 );
 rightPanel.rotation.y = -Math.PI / 2;
-rightPanel.position.set(CORRIDOR_W / 2 + 0.3, CORRIDOR_H / 2, -CORRIDOR_D / 2 + 7);
+rightPanel.position.set(CORRIDOR_W / 2 + 0.3, 0.8, -CORRIDOR_D / 2 + 7);
 scene.add(rightPanel);
 
 // ─── Structural Columns ──────────────────────────────────────────────────────
@@ -280,7 +286,7 @@ function buildHangingLantern(x, y, z) {
 
   // Point light inside lantern
   const pt = new THREE.PointLight(0xff8830, 1.4, 4.5, 2);
-  pt.castShadow = true;
+  pt.castShadow = false;
   pt.shadow.mapSize.width = 256;
   pt.shadow.mapSize.height = 256;
   group.add(pt);
@@ -311,7 +317,7 @@ function buildStandingLantern(x, z) {
   const shadeMat = new THREE.MeshStandardMaterial({
     color: 0xfff3cc,
     emissive: new THREE.Color(0xff9900),
-    emissiveIntensity: 2.2,
+    emissiveIntensity: 4.0,
     roughness: 0.95,
     transparent: true,
     opacity: 0.9,
@@ -330,7 +336,7 @@ function buildStandingLantern(x, z) {
 
   const pt = new THREE.PointLight(0xff9400, 2.0, 5, 2);
   pt.position.y = 1.55;
-  pt.castShadow = true;
+  pt.castShadow = false;
   group.add(pt);
 
   group.position.set(x, 0, z);
@@ -343,12 +349,15 @@ buildStandingLantern(CORRIDOR_W / 2 - 0.15, 3.5);
 
 
 // ─── Ambient & Directional Light ─────────────────────────────────────────────
-// Very dim ambient — the scene should be lit almost entirely by lanterns
-const ambient = new THREE.AmbientLight(0x321100, 0.65);
-scene.add(ambient);
+// Warm ambient keeps corridor lanterns looking correct; cool blue ambient adds
+// the moonlit base that dominates the unlit exterior.
+const warmAmbient = new THREE.AmbientLight(0x321100, 0.5);
+scene.add(warmAmbient);
+const moonAmbient = new THREE.AmbientLight(0x1a2850, 1.1);
+scene.add(moonAmbient);
 
-// Moonlight — cool blue-white from upper-left, now strong enough to illuminate the exterior
-const moonLight = new THREE.DirectionalLight(0xb0c4ff, 0.55);
+// Primary moonlight — bright blue-white directional from upper-left
+const moonLight = new THREE.DirectionalLight(0xc0d4ff, 1.6);
 moonLight.position.set(-10, 20, 15);
 moonLight.castShadow = true;
 moonLight.shadow.mapSize.width  = 1024;
@@ -448,6 +457,73 @@ const threshMat = new THREE.MeshStandardMaterial({ color: 0x48433c, roughness: 0
   left.instanceMatrix.needsUpdate = right.instanceMatrix.needsUpdate = true;
   scene.add(left);
   scene.add(right);
+})();
+
+// ─── Moon ─────────────────────────────────────────────────────────────────────
+// Positioned over the open right-hand side so it is visible from the corridor.
+const MOON_POS = new THREE.Vector3(22, 35, 30);
+
+const moonMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(4.2, 32, 32),
+  new THREE.MeshBasicMaterial({
+    map: moonTex,
+    fog: false,
+  })
+);
+
+moonMesh.position.copy(MOON_POS);
+scene.add(moonMesh);
+
+const moonGlow = new THREE.PointLight(0xeef0ff, 1.5, 80);
+moonGlow.position.copy(MOON_POS);
+scene.add(moonGlow);
+
+
+// Moon fill light — blue wash across the exterior ground
+const moonPtLight = new THREE.PointLight(0x8aadff, 2.4, 250, 1.4);
+moonPtLight.position.copy(MOON_POS);
+scene.add(moonPtLight);
+
+// ─── Starfield ────────────────────────────────────────────────────────────────
+// Stars at r=150-180 — large enough that the player's movement (~56 units max)
+// never creates uneven density. fog:false on every layer so FogExp2 never hides them.
+(function buildStarfield() {
+  function hemispherePositions(count, rMin, rMax) {
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi   = Math.acos(1 - Math.random()); // area-weighted: 0=zenith, π/2=horizon
+      const r     = rMin + Math.random() * (rMax - rMin);
+      arr[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+      arr[i*3+1] = r * Math.cos(phi) + 5;
+      arr[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    return arr;
+  }
+
+  // Layer 1 — 3 000 faint blue-white background stars
+  const geo1 = new THREE.BufferGeometry();
+  geo1.setAttribute('position', new THREE.BufferAttribute(hemispherePositions(3000, 155, 180), 3));
+  scene.add(new THREE.Points(geo1, new THREE.PointsMaterial({
+    color: 0xaaccff, size: 0.45, sizeAttenuation: true,
+    transparent: true, opacity: 0.88, fog: false,
+  })));
+
+  // Layer 2 — 600 medium white stars
+  const geo2 = new THREE.BufferGeometry();
+  geo2.setAttribute('position', new THREE.BufferAttribute(hemispherePositions(600, 150, 175), 3));
+  scene.add(new THREE.Points(geo2, new THREE.PointsMaterial({
+    color: 0xffffff, size: 0.8, sizeAttenuation: true,
+    transparent: true, opacity: 0.95, fog: false,
+  })));
+
+  // Layer 3 — 80 bright hero stars
+  const geo3 = new THREE.BufferGeometry();
+  geo3.setAttribute('position', new THREE.BufferAttribute(hemispherePositions(80, 145, 170), 3));
+  scene.add(new THREE.Points(geo3, new THREE.PointsMaterial({
+    color: 0xe8f0ff, size: 1.4, sizeAttenuation: true,
+    transparent: true, opacity: 1.0, fog: false,
+  })));
 })();
 
 // ─── Resize Handler ──────────────────────────────────────────────────────────
