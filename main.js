@@ -41,6 +41,25 @@ const floorTex  = loader.load('./assets/floor.png');
 const wallTex   = loader.load('./assets/wall.png');
 const lanternTex = loader.load('./assets/lantern.png');
 const moonTex = loader.load('./assets/moon.jpg');
+const listener = new THREE.AudioListener();
+camera.add(listener);
+
+const clapSound = new THREE.Audio(listener);
+const audioLoader = new THREE.AudioLoader();
+audioLoader.load('./assets/bell.wav', buffer => {
+  clapSound.setBuffer(buffer);
+  clapSound.setVolume(0.8);
+});
+let clapPulse = 0; // 0 = no pulse, >0 = active
+let isClapping = false;
+
+window.addEventListener('click', () => {
+  if (document.pointerLockElement !== renderer.domElement) return;
+  if (clapSound.isPlaying) clapSound.stop();
+  clapSound.play();
+  clapPulse = 1.0; // start pulse at full
+});
+
 
 [floorTex, wallTex].forEach(t => {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -548,7 +567,7 @@ function animate() {
   camera.rotation.x = pitch;
 
   // ── WASD movement ──
-  const speed = 0.09;
+  const speed = 0.2;
   camera.getWorldDirection(forward);
   forward.y = 0;
   forward.normalize();
@@ -571,6 +590,15 @@ function animate() {
 lanternPositions.forEach(({ pt, baseIntensity }, i) => {
   const flicker = 1.0 + 0.12 * Math.sin(t * 3.1 + i * 1.7) + 0.06 * Math.sin(t * 7.3 + i * 2.3);
   pt.intensity = baseIntensity * flicker;
+});
+
+if (clapPulse > 0) clapPulse -= 0.018; // decay over ~55 frames
+
+lanternPositions.forEach(({ pt, baseIntensity }, i) => {
+  const flicker = 1.0 + 0.12 * Math.sin(t * 3.1 + i * 1.7) 
+                      + 0.06 * Math.sin(t * 7.3 + i * 2.3);
+  const pulse = 1.0 + clapPulse * 2.5; // peak at 3.5× brightness
+  pt.intensity = baseIntensity * flicker * pulse;
 });
 
   renderer.render(scene, camera);
