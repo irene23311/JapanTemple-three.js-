@@ -1,0 +1,1 @@
+Changes I made: I add a moon and stars in the sky. Extend the space around the hallway. Add clicking interaction, when clicking a bell sound appears with the temple lighten up a bit, responding to the bell. 
