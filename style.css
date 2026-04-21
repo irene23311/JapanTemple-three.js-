@@ -1,0 +1,28 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #090302;
+  font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+}
+
+canvas {
+  display: block;
+}
+
+#info {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  padding: 8px 10px;
+  color: rgba(255, 237, 219, 0.82);
+  background: rgba(18, 7, 4, 0.28);
+  border: 1px solid rgba(255, 196, 132, 0.16);
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  z-index: 10;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
